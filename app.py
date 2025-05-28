@@ -2,6 +2,7 @@ import yfinance as yf
 import pandas as pd
 import streamlit as st
 
+# Tickers ETF
 tickers = {
     'SXR8': 'SXR8.DE',
     'ACWX': 'ACWX',
@@ -9,61 +10,83 @@ tickers = {
     'TLT': 'TLT'
 }
 
+# Ticker du T-Bill (rendement 13 semaines)
 t_bill_ticker = '^IRX'
 
-# Dates d’analyse
+# Définir la période d’analyse sur 12 mois
 end_date = pd.to_datetime('today').normalize()
 start_date = end_date - pd.DateOffset(years=1)
 
-def get_total_return(ticker):
-    # Télécharge les prix
-    data = yf.download(ticker, start=start_date, end=end_date, auto_adjust=False)
-    
-    # Récupère les dividendes
-    dividends = yf.Ticker(ticker).dividends
-    dividends.index = pd.to_datetime(dividends.index)  # ✅ conversion nécessaire ici
-    
-    # Filtrer la période
-    dividends = dividends[(dividends.index >= start_date) & (dividends.index <= end_date)]
-    
-    # Prix d'entrée et de sortie
-    price_start = data['Close'].iloc[0]
-    price_end = data['Close'].iloc[-1]
-    
-    # Rendement total avec dividendes
-    total_dividends = dividends.sum() if not dividends.empty else 0
-    total_return = ((price_end + total_dividends) / price_start - 1) * 100
-    return round(total_return, 2)
+# Télécharger les données des ETF (ajustées)
+raw_data = yf.download(
+    list(tickers.values()),
+    start=start_date,
+    end=end_date,
+    group_by='ticker',
+    auto_adjust=True
+)
 
-# Récupérer performances de tous les actifs
-perf = {name: get_total_return(ticker) for name, ticker in tickers.items()}
+# Initialiser un DataFrame pour les prix de clôture
+data = pd.DataFrame()
 
-# Récupérer taux du T-Bill
+for name, ticker in tickers.items():
+    try:
+        if isinstance(raw_data.columns, pd.MultiIndex):
+            data[name] = raw_data[ticker]['Close']
+        else:
+            data[name] = raw_data['Close']
+    except Exception as e:
+        st.warning(f"Erreur lors de l'import de {name} ({ticker}) : {e}")
+
+# Supprimer les lignes avec valeurs manquantes
+data = data.dropna()
+
+# Calculer les performances sur les dates valides
+first_values = data.iloc[0]
+last_values = data.iloc[-1]
+performance = ((last_values / first_values) - 1) * 100
+performance = performance.round(2)
+
+# Télécharger le rendement du T-Bill (13 semaines)
 try:
     irx_data = yf.download(t_bill_ticker, period="5d", interval="1d", progress=False)
     irx_yield_raw = irx_data['Close'].dropna().iloc[-1]
-    t_bill_yield = round(float(irx_yield_raw), 2)
+    t_bill_yield = round(float(irx_yield_raw), 2)  # En pourcentage
 except Exception as e:
-    st.error(f"Erreur T-Bill : {e}")
-    t_bill_yield = 0
+    st.error(f"Erreur de récupération du T-Bill : {e}")
+    t_bill_yield = None
+
+# Extraire les performances individuelles
+sxr8_perf = float(performance.get('SXR8', 0))
+acwx_perf = float(performance.get('ACWX', 0))
+agg_perf = float(performance.get('AGG', 0))
+tlt_perf = float(performance.get('TLT', 0))
+t_bill_yield = float(t_bill_yield or 0)
 
 # Appliquer la stratégie Dual Momentum
-if max(perf['AGG'], perf['TLT']) > max(perf['SXR8'], perf['ACWX']):
-    result = 'AGG' if perf['AGG'] > perf['TLT'] else 'TLT'
+if max(agg_perf, tlt_perf) > max(sxr8_perf, acwx_perf):
+    result = 'AGG' if agg_perf > tlt_perf else 'TLT'
 else:
-    if perf['SXR8'] > perf['ACWX']:
-        result = 'SXR8' if perf['SXR8'] > t_bill_yield else 'Cash / T-Bills'
+    if sxr8_perf > acwx_perf:
+        result = 'SXR8' if sxr8_perf > t_bill_yield else 'Cash / T-Bills'
     else:
-        result = 'ACWX' if perf['ACWX'] > t_bill_yield else 'Cash / T-Bills'
+        result = 'ACWX' if acwx_perf > t_bill_yield else 'Cash / T-Bills'
 
-# Interface Streamlit
-st.title("📊 Stratégie Dual Momentum - Rendement Total (12 Mois)")
+# Interface utilisateur Streamlit
+st.title("📊 Stratégie Dual Momentum - Analyse sur 12 Mois")
 
-df_perf = pd.DataFrame(list(perf.items()), columns=['ETF', 'Performance 12M (%)'])
+# Tableau des performances
+df_perf = pd.DataFrame({
+    'ETF': ['SXR8', 'ACWX', 'AGG', 'TLT'],
+    'Performance 12M (%)': [sxr8_perf, acwx_perf, agg_perf, tlt_perf]
+})
 st.dataframe(df_perf.style.format({'Performance 12M (%)': '{:.2f}'}), use_container_width=True)
 
-st.markdown(f"**Rendement T-Bill (13 semaines)** : `{t_bill_yield:.2f}%`")
+# Affichage du rendement des T-Bills
+if t_bill_yield:
+    st.markdown(f"**Rendement T-Bill (13 semaines)** : `{t_bill_yield:.2f}%`")
 
+# Résultat de la stratégie
 st.markdown(
     f"<div style='background-color: yellow; padding: 10px; font-size: 20px; text-align: center;'>"
     f"<strong>Résultat : {result}</strong>"

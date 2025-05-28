@@ -21,9 +21,7 @@ def calc_perf(ticker):
     if data.empty or 'Close' not in data.columns:
         return None, None
 
-    # Filtrer les valeurs manquantes dans Close si colonne présente
     data = data[['Close']].dropna()
-
     if data.empty:
         return None, None
 
@@ -33,12 +31,14 @@ def calc_perf(ticker):
     date_6m = today - timedelta(days=182)
     date_12m = today - timedelta(days=365)
 
-    # Chercher les prix proches dans le passé
-    price_6m = data[data.index <= date_6m]['Close'].iloc[-1] if not data[data.index <= date_6m].empty else None
-    price_12m = data[data.index <= date_12m]['Close'].iloc[-1] if not data[data.index <= date_12m].empty else None
+    price_6m_series = data[data.index <= date_6m]['Close']
+    price_12m_series = data[data.index <= date_12m]['Close']
 
-    if price_6m is None or price_12m is None:
+    if price_6m_series.empty or price_12m_series.empty:
         return None, None
+
+    price_6m = price_6m_series.iloc[-1]
+    price_12m = price_12m_series.iloc[-1]
 
     perf_6m = (price_today - price_6m) / price_6m * 100
     perf_12m = (price_today - price_12m) / price_12m * 100
@@ -60,8 +60,8 @@ with st.spinner("📥 Récupération des données..."):
 df_display = pd.DataFrame([
     {
         "Actif": r["name"],
-        "Performance 6 mois (%)": f"{r['perf_6m']:.2f}" if isinstance(r['perf_6m'], (int, float)) else "N/A",
-        "Performance 12 mois (%)": f"{r['perf_12m']:.2f}" if isinstance(r['perf_12m'], (int, float)) else "N/A",
+        "Performance 6 mois (%)": f"{r['perf_6m']:.2f}" if isinstance(r['perf_6m'], (float, int)) else "N/A",
+        "Performance 12 mois (%)": f"{r['perf_12m']:.2f}" if isinstance(r['perf_12m'], (float, int)) else "N/A",
     }
     for r in results.values()
 ])
@@ -70,15 +70,18 @@ st.subheader("📈 Performances des actifs")
 st.table(df_display)
 
 # Recommandation
-perf_actions = max([
-    results.get("SXR8.DE", {}).get("perf_12m") or -999,
-    results.get("ACWX", {}).get("perf_12m") or -999
-])
+def safe_perf(val):
+    return val if isinstance(val, (float, int)) and pd.notna(val) else -999
 
-perf_oblig = max([
-    results.get("AGG", {}).get("perf_12m") or -999,
-    results.get("TLT", {}).get("perf_12m") or -999
-])
+perf_actions = max(
+    safe_perf(results.get("SXR8.DE", {}).get("perf_12m")),
+    safe_perf(results.get("ACWX", {}).get("perf_12m")),
+)
+
+perf_oblig = max(
+    safe_perf(results.get("AGG", {}).get("perf_12m")),
+    safe_perf(results.get("TLT", {}).get("perf_12m")),
+)
 
 st.subheader("🔍 Recommandation")
 if perf_actions > perf_oblig:

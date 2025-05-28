@@ -13,39 +13,49 @@ tickers = {
 }
 
 def get_price_nearest_date(data, target_date):
-    """Trouve le cours de clôture à la date la plus proche avant ou égale à target_date"""
-    available_dates = data.index
-    available_dates = available_dates[available_dates <= target_date]
-    if len(available_dates) == 0:
+    try:
+        available_dates = data.index
+        available_dates = available_dates[available_dates <= target_date]
+        if len(available_dates) == 0:
+            return None
+        closest_date = available_dates[-1]
+        return data.loc[closest_date]['Close']
+    except:
         return None
-    closest_date = available_dates[-1]
-    return data.loc[closest_date]['Close']
 
 def calc_perf(ticker):
     data = yf.download(ticker, period="1y", interval="1d", progress=False)
-    if data.empty or 'Close' not in data.columns:
+    if data.empty:
+        st.warning(f"Aucune donnée trouvée pour {ticker}")
+        return None, None
+    if 'Close' not in data.columns:
+        st.warning(f"La colonne 'Close' est absente pour {ticker}")
         return None, None
 
-    today = data.index[-1]
-    price_today = data['Close'][-1]
+    try:
+        today = data.index[-1]
+        price_today = data['Close'].iloc[-1]
 
-    date_6m = today - timedelta(days=182)
-    date_12m = today - timedelta(days=365)
+        date_6m = today - timedelta(days=182)
+        date_12m = today - timedelta(days=365)
 
-    price_6m = get_price_nearest_date(data, date_6m)
-    price_12m = get_price_nearest_date(data, date_12m)
+        price_6m = get_price_nearest_date(data, date_6m)
+        price_12m = get_price_nearest_date(data, date_12m)
 
-    if price_6m is None or price_12m is None:
+        if price_6m is None or price_12m is None:
+            return None, None
+
+        perf_6m = (price_today - price_6m) / price_6m * 100
+        perf_12m = (price_today - price_12m) / price_12m * 100
+
+        return perf_6m, perf_12m
+    except Exception as e:
+        st.error(f"Erreur lors du calcul pour {ticker} : {e}")
         return None, None
-
-    perf_6m = (price_today - price_6m) / price_6m * 100
-    perf_12m = (price_today - price_12m) / price_12m * 100
-
-    return perf_6m, perf_12m
 
 results = {}
 
-with st.spinner("Récupération des données..."):
+with st.spinner("📥 Récupération des données..."):
     for ticker, name in tickers.items():
         perf_6m, perf_12m = calc_perf(ticker)
         results[ticker] = {
@@ -54,7 +64,6 @@ with st.spinner("Récupération des données..."):
             "perf_12m": perf_12m,
         }
 
-# Préparation DataFrame pour affichage
 df_display = pd.DataFrame([
     {
         "Actif": r["name"],
@@ -64,10 +73,9 @@ df_display = pd.DataFrame([
     for r in results.values()
 ])
 
-st.subheader("Performances des actifs")
+st.subheader("📈 Performances des actifs")
 st.table(df_display)
 
-# Logique Dual Momentum simplifiée
 perf_actions = max(
     results.get("SXR8.DE", {}).get("perf_12m") or -999,
     results.get("ACWX", {}).get("perf_12m") or -999,
@@ -77,7 +85,7 @@ perf_oblig = max(
     results.get("TLT", {}).get("perf_12m") or -999,
 )
 
-st.subheader("Recommandation")
+st.subheader("📌 Recommandation")
 if perf_actions > perf_oblig:
     st.success("📈 Investir en actions (US ou Monde)")
 else:

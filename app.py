@@ -2,58 +2,61 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 
-# Définir la date de début (12 mois en arrière)
+# Définir la période
 end_date = datetime.today()
 start_date = end_date - timedelta(days=365)
 
-# Télécharger les données des ETFs
+# Tickers à surveiller
 tickers = {
     'AGG': 'AGG',
     'TLT': 'TLT',
     'SXR8': 'SXR8.DE',
     'ACWX': 'ACWX',
-    'US03MY': '^IRX'  # Taux des bons du Trésor US à 3 mois
+    'US03MY': '^IRX'
 }
 
-data = {}
+# Télécharger et stocker les données
+returns = {}
 for name, ticker in tickers.items():
     df = yf.download(ticker, start=start_date, end=end_date)
     if df.empty:
-        print(f"Les données pour {name} ({ticker}) sont indisponibles.")
+        print(f"[⚠️] Données indisponibles pour {name} ({ticker})")
         continue
-    data[name] = df['Adj Close']
 
-# Calculer les rendements sur 12 mois
-returns = {}
-for name, prices in data.items():
-    if len(prices) < 2:
-        continue
-    returns[name] = (prices[-1] - prices[0]) / prices[0] * 100
+    # Essayer d’utiliser 'Adj Close', sinon 'Close'
+    try:
+        prices = df['Adj Close']
+    except KeyError:
+        try:
+            prices = df['Close']
+        except KeyError:
+            print(f"[❌] Ni 'Adj Close' ni 'Close' trouvés pour {name}")
+            continue
+
+    if len(prices) >= 2:
+        returns[name] = (prices.iloc[-1] - prices.iloc[0]) / prices.iloc[0] * 100
+    else:
+        print(f"[ℹ️] Pas assez de données pour {name}")
 
 # Afficher les rendements
-print("Rendements sur 12 mois :")
-for name, ret in returns.items():
-    print(f"{name}: {ret:.2f}%")
+print("\n📊 Rendements sur 12 mois :")
+for name, perf in returns.items():
+    print(f"{name}: {perf:.2f}%")
 
 # Logique de sélection
-selected_asset = None
-
-# Vérifier si les données nécessaires sont disponibles
 required_keys = ['AGG', 'TLT', 'SXR8', 'ACWX', 'US03MY']
-if not all(key in returns for key in required_keys):
-    print("Données insuffisantes pour effectuer la sélection.")
+if not all(k in returns for k in required_keys):
+    print("\n[🚫] Données incomplètes pour appliquer la stratégie.")
 else:
     avg_bonds = (returns['AGG'] + returns['TLT']) / 2
     avg_stocks = (returns['SXR8'] + returns['ACWX']) / 2
 
     if avg_bonds > avg_stocks:
-        # Les obligations performent mieux
-        selected_asset = 'AGG' if returns['AGG'] > returns['TLT'] else 'TLT'
+        selected = 'AGG' if returns['AGG'] > returns['TLT'] else 'TLT'
     else:
-        # Les actions performent mieux
         if returns['SXR8'] > returns['ACWX']:
-            selected_asset = 'SXR8' if returns['SXR8'] > returns['US03MY'] else 'US03MY'
+            selected = 'SXR8' if returns['SXR8'] > returns['US03MY'] else 'US03MY'
         else:
-            selected_asset = 'ACWX' if returns['ACWX'] > returns['US03MY'] else 'US03MY'
+            selected = 'ACWX' if returns['ACWX'] > returns['US03MY'] else 'US03MY'
 
-    print(f"\nActif sélectionné pour le mois : {selected_asset}")
+    print(f"\n✅ Actif sélectionné : {selected}")

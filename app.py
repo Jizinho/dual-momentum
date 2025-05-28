@@ -17,7 +17,7 @@ tickers = {
 # Fonction pour calculer performance sur 6M et 12M
 def calc_perf(ticker):
     data = yf.download(ticker, period="1y", interval="1d", progress=False)
-    if data.empty:
+    if data.empty or 'Close' not in data.columns:
         return None, None
     today = data.index[-1]
     price_today = data['Close'][-1]
@@ -25,9 +25,7 @@ def calc_perf(ticker):
     date_6m = today - timedelta(days=182)
     date_12m = today - timedelta(days=365)
 
-    # prix au plus proche date 6 mois
     price_6m = data['Close'].asof(date_6m)
-    # prix au plus proche date 12 mois
     price_12m = data['Close'].asof(date_12m)
 
     perf_6m = (price_today - price_6m) / price_6m * 100 if price_6m else None

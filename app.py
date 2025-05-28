@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 st.title("📊 Dual Momentum Strategy")
 
-# Tickeurs sans ^IRX car cause erreur
+# Tickers à tester
 tickers = {
     "SXR8.DE": "Actions US (SXR8)",
     "ACWX": "Actions Monde (ACWX)",
@@ -15,12 +15,7 @@ tickers = {
 
 def calc_perf(ticker):
     data = yf.download(ticker, period="1y", interval="1d", progress=False)
-    st.write(f"Ticker: {ticker}")
-    st.write(f"Données récupérées (colonnes): {list(data.columns)}")
-    st.write(data.head())
-
     if data.empty or 'Close' not in data.columns:
-        st.warning(f"Aucune donnée Close disponible pour {ticker}")
         return None, None
     today = data.index[-1]
     price_today = data['Close'][-1]
@@ -31,8 +26,11 @@ def calc_perf(ticker):
     price_6m = data['Close'].asof(date_6m)
     price_12m = data['Close'].asof(date_12m)
 
-    perf_6m = (price_today - price_6m) / price_6m * 100 if price_6m else None
-    perf_12m = (price_today - price_12m) / price_12m * 100 if price_12m else None
+    if price_6m is None or price_12m is None:
+        return None, None
+
+    perf_6m = (price_today - price_6m) / price_6m * 100
+    perf_12m = (price_today - price_12m) / price_12m * 100
 
     return perf_6m, perf_12m
 
@@ -47,36 +45,31 @@ with st.spinner("Récupération des données..."):
             "perf_12m": perf_12m,
         }
 
-st.subheader("Performances des actifs")
-
+# Préparation DataFrame pour affichage
 df_display = pd.DataFrame([
     {
         "Actif": r["name"],
-        "Performance 6 mois (%)": f"{r['perf_6m']:.2f}" if r['perf_6m'] else "N/A",
-        "Performance 12 mois (%)": f"{r['perf_12m']:.2f}" if r['perf_12m'] else "N/A",
+        "Performance 6 mois (%)": f"{r['perf_6m']:.2f}" if r['perf_6m'] is not None else "N/A",
+        "Performance 12 mois (%)": f"{r['perf_12m']:.2f}" if r['perf_12m'] is not None else "N/A",
     }
     for r in results.values()
 ])
 
+st.subheader("Performances des actifs")
 st.table(df_display)
 
-def get_perf(ticker):
-    val = results.get(ticker, {})
-    return val.get("perf_12m") or -999
-
-perf_actions = max(get_perf("SXR8.DE"), get_perf("ACWX"))
-perf_oblig = max(get_perf("AGG"), get_perf("TLT"))
-perf_tbills = -999  # Pas de T-Bills ici
+# Logique Dual Momentum simplifiée
+perf_actions = max(
+    results.get("SXR8.DE", {}).get("perf_12m") or -999,
+    results.get("ACWX", {}).get("perf_12m") or -999,
+)
+perf_oblig = max(
+    results.get("AGG", {}).get("perf_12m") or -999,
+    results.get("TLT", {}).get("perf_12m") or -999,
+)
 
 st.subheader("Recommandation")
-
 if perf_actions > perf_oblig:
-    if perf_actions > perf_tbills:
-        st.success("📈 Investir en actions (US ou Monde)")
-    else:
-        st.info("💵 Rester en cash (T-Bills mieux que Actions)")
+    st.success("📈 Investir en actions (US ou Monde)")
 else:
-    if perf_oblig > perf_tbills:
-        st.success("📉 Investir en obligations (court ou long terme)")
-    else:
-        st.info("💵 Rester en cash (T-Bills mieux que Obligations)")
+    st.success("📉 Investir en obligations (court ou long terme)")

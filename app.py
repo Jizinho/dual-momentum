@@ -71,4 +71,7 @@ with st.expander("🔍 Voir les données brutes téléchargées"):
     for name, ticker in etfs.items():
         st.write(f"**{name}** ({ticker})")
         data = yf.download(ticker, start=start_date, end=end_date, interval="1mo")
-        st.line_chart(data['Adj Close'] if 'Adj Close' in data else data)
+        if 'Adj Close' in data and not data['Adj Close'].dropna().empty:
+            st.line_chart(data['Adj Close'])
+        else:
+            st.info("⛔ Données indisponibles ou incompatibles pour ce ticker.")

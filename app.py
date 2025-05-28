@@ -1,75 +1,53 @@
-import streamlit as st
 import yfinance as yf
 import pandas as pd
+import streamlit as st
 from datetime import datetime, timedelta
 
-st.title("📊 Dual Momentum Strategy")
+st.title("Dual Momentum - Performances 6M & 12M")
 
-# Tickers à tester
+# Tickers à analyser
 tickers = {
-    "SXR8.DE": "Actions US (SXR8)",
-    "ACWX": "Actions Monde (ACWX)",
-    "AGG": "Obligations CT (AGG)",
-    "TLT": "Obligations LT (TLT)"
+    "S&P 500 (SPY)": "SPY",
+    "ACWI ex-US (ACWX)": "ACWX",
+    "US Bonds (AGG)": "AGG",
+    "Long-Term Bonds (TLT)": "TLT",
+    "US 3M T-Bill (IRX)": "^IRX"
 }
 
-def calc_perf(ticker):
-    data = yf.download(ticker, period="1y", interval="1d", progress=False)
-    if data.empty or 'Close' not in data.columns:
-        return None, None
-    today = data.index[-1]
-    price_today = data['Close'][-1]
+# Dates de référence
+today = datetime.today()
+six_months_ago = today - timedelta(days=182)
+twelve_months_ago = today - timedelta(days=365)
 
-    date_6m = today - timedelta(days=182)
-    date_12m = today - timedelta(days=365)
-
-    price_6m = data['Close'].asof(date_6m)
-    price_12m = data['Close'].asof(date_12m)
-
-    if price_6m is None or price_12m is None:
+@st.cache_data
+def calc_performance(ticker):
+    data = yf.download(ticker, start=twelve_months_ago, end=today)
+    if data.empty or "Close" not in data.columns:
         return None, None
 
-    perf_6m = (price_today - price_6m) / price_6m * 100
-    perf_12m = (price_today - price_12m) / price_12m * 100
+    price_today = data["Close"][-1]
+    
+    price_6m_ago = data[data.index <= six_months_ago]["Close"]
+    price_12m_ago = data[data.index <= twelve_months_ago]["Close"]
 
-    return perf_6m, perf_12m
+    if price_6m_ago.empty or price_12m_ago.empty:
+        return None, None
 
-results = {}
+    perf_6m = (price_today - price_6m_ago[-1]) / price_6m_ago[-1] * 100
+    perf_12m = (price_today - price_12m_ago[-1]) / price_12m_ago[-1] * 100
 
-with st.spinner("Récupération des données..."):
-    for ticker, name in tickers.items():
-        perf_6m, perf_12m = calc_perf(ticker)
-        results[ticker] = {
-            "name": name,
-            "perf_6m": perf_6m,
-            "perf_12m": perf_12m,
-        }
+    return round(perf_6m, 2), round(perf_12m, 2)
 
-# Préparation DataFrame pour affichage
-df_display = pd.DataFrame([
-    {
-        "Actif": r["name"],
-        "Performance 6 mois (%)": f"{r['perf_6m']:.2f}" if r['perf_6m'] is not None else "N/A",
-        "Performance 12 mois (%)": f"{r['perf_12m']:.2f}" if r['perf_12m'] is not None else "N/A",
-    }
-    for r in results.values()
-])
+# Création du tableau de performance
+results = []
+for name, ticker in tickers.items():
+    perf_6m, perf_12m = calc_performance(ticker)
+    results.append({
+        "Nom": name,
+        "Ticker": ticker,
+        "Perf. 6M (%)": perf_6m,
+        "Perf. 12M (%)": perf_12m
+    })
 
-st.subheader("Performances des actifs")
-st.table(df_display)
-
-# Logique Dual Momentum simplifiée
-perf_actions = max(
-    results.get("SXR8.DE", {}).get("perf_12m") or -999,
-    results.get("ACWX", {}).get("perf_12m") or -999,
-)
-perf_oblig = max(
-    results.get("AGG", {}).get("perf_12m") or -999,
-    results.get("TLT", {}).get("perf_12m") or -999,
-)
-
-st.subheader("Recommandation")
-if perf_actions > perf_oblig:
-    st.success("📈 Investir en actions (US ou Monde)")
-else:
-    st.success("📉 Investir en obligations (court ou long terme)")
+df = pd.DataFrame(results)
+st.dataframe(df)

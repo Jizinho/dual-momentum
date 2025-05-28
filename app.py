@@ -2,7 +2,7 @@ import yfinance as yf
 import pandas as pd
 import streamlit as st
 
-# Tickers ETF
+# Tickers ETF à analyser
 tickers = {
     'SXR8': 'SXR8.DE',
     'ACWX': 'ACWX',
@@ -10,38 +10,38 @@ tickers = {
     'TLT': 'TLT'
 }
 
-# Ticker du T-Bill (rendement 13 semaines)
+# Ticker du T-Bill 13 semaines
 t_bill_ticker = '^IRX'
 
 # Définir la période d’analyse sur 12 mois
 end_date = pd.to_datetime('today').normalize()
 start_date = end_date - pd.DateOffset(years=1)
 
-# Télécharger les données des ETF (ajustées)
+# Télécharger les données (sans auto_adjust)
 raw_data = yf.download(
     list(tickers.values()),
     start=start_date,
     end=end_date,
     group_by='ticker',
-    auto_adjust=True
+    auto_adjust=False  # Pour utiliser Adj Close manuellement
 )
 
-# Initialiser un DataFrame pour les prix de clôture
+# Initialiser un DataFrame pour les Adj Close
 data = pd.DataFrame()
 
 for name, ticker in tickers.items():
     try:
         if isinstance(raw_data.columns, pd.MultiIndex):
-            data[name] = raw_data[ticker]['Close']
+            data[name] = raw_data[ticker]['Adj Close']
         else:
-            data[name] = raw_data['Close']
+            data[name] = raw_data['Adj Close']
     except Exception as e:
         st.warning(f"Erreur lors de l'import de {name} ({ticker}) : {e}")
 
-# Supprimer les lignes avec valeurs manquantes
+# Supprimer les lignes incomplètes
 data = data.dropna()
 
-# Calculer les performances sur les dates valides
+# Calcul des performances sur les dates alignées
 first_values = data.iloc[0]
 last_values = data.iloc[-1]
 performance = ((last_values / first_values) - 1) * 100
@@ -56,7 +56,7 @@ except Exception as e:
     st.error(f"Erreur de récupération du T-Bill : {e}")
     t_bill_yield = None
 
-# Extraire les performances individuelles
+# Extraire les performances
 sxr8_perf = float(performance.get('SXR8', 0))
 acwx_perf = float(performance.get('ACWX', 0))
 agg_perf = float(performance.get('AGG', 0))

@@ -5,16 +5,14 @@ from datetime import datetime, timedelta
 
 st.title("📊 Dual Momentum Strategy")
 
-# Définition des tickers et noms
+# Tickeurs sans ^IRX car cause erreur
 tickers = {
     "SXR8.DE": "Actions US (SXR8)",
     "ACWX": "Actions Monde (ACWX)",
     "AGG": "Obligations CT (AGG)",
-    "TLT": "Obligations LT (TLT)",
-    "^IRX": "T-Bills (US03MY)"
+    "TLT": "Obligations LT (TLT)"
 }
 
-# Fonction pour calculer performance sur 6M et 12M
 def calc_perf(ticker):
     data = yf.download(ticker, period="1y", interval="1d", progress=False)
     if data.empty or 'Close' not in data.columns:
@@ -44,7 +42,6 @@ with st.spinner("Récupération des données..."):
             "perf_12m": perf_12m,
         }
 
-# Affichage des résultats
 st.subheader("Performances des actifs")
 
 df_display = pd.DataFrame([
@@ -58,15 +55,13 @@ df_display = pd.DataFrame([
 
 st.table(df_display)
 
-# Calcul recommandation Dual Momentum
-
 def get_perf(ticker):
     val = results.get(ticker, {})
     return val.get("perf_12m") or -999
 
 perf_actions = max(get_perf("SXR8.DE"), get_perf("ACWX"))
 perf_oblig = max(get_perf("AGG"), get_perf("TLT"))
-perf_tbills = get_perf("^IRX")
+perf_tbills = -999  # Pas de T-Bills ici
 
 st.subheader("Recommandation")
 
@@ -80,4 +75,3 @@ else:
         st.success("📉 Investir en obligations (court ou long terme)")
     else:
         st.info("💵 Rester en cash (T-Bills mieux que Obligations)")
-

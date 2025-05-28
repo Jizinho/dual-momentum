@@ -6,31 +6,41 @@ def get_1y_performance(ticker: str):
     today = datetime.today().date()
     one_year_ago = today - timedelta(days=365)
 
-    # Télécharge les données étendues autour de la période cible pour avoir des données valides
-    data = yf.download(ticker, start=(one_year_ago - timedelta(days=5)).strftime('%Y-%m-%d'),
-                                end=(today + timedelta(days=1)).strftime('%Y-%m-%d'),
-                                progress=False)
+    # Télécharger plus de données autour de la période cible
+    data = yf.download(
+        ticker,
+        start=(one_year_ago - timedelta(days=10)).strftime('%Y-%m-%d'),
+        end=(today + timedelta(days=1)).strftime('%Y-%m-%d'),
+        progress=False
+    )
 
     if data.empty or "Close" not in data:
-        return f"{ticker} : No data"
+        return f"{ticker.replace('.DE','')} : No data"
 
-    data = data['Close'].dropna()
+    close_prices = data["Close"].dropna()
+    close_prices.index = pd.to_datetime(close_prices.index).date
 
-    # S'assurer que les dates sont des objets datetime.date
-    data.index = pd.to_datetime(data.index).date
+    # Chercher les dates disponibles les plus proches
+    past_dates = [d for d in close_prices.index if d >= one_year_ago]
+    today_dates = [d for d in close_prices.index if d <= today]
 
-    # Trouver les dates les plus proches disponibles
-    closest_past_date = min([d for d in data.index if d >= one_year_ago], default=None)
-    closest_today_date = max([d for d in data.index if d <= today], default=None)
+    if not past_dates or not today_dates:
+        return f"{ticker.replace('.DE','')} : Insufficient data"
 
-    if not closest_past_date or not closest_today_date:
-        return f"{ticker} : Not enough data"
+    start_date = min(past_dates)
+    end_date = max(today_dates)
 
-    start_price = data.loc[closest_past_date]
-    end_price = data.loc[closest_today_date]
+    start_price = close_prices.get(start_date)
+    end_price = close_prices.get(end_date)
 
-    performance = ((end_price - start_price) / start_price) * 100
-    return f"{ticker.replace('.DE','')} : {performance:.2f} %"
+    if start_price is None or end_price is None:
+        return f"{ticker.replace('.DE','')} : Price data missing"
+
+    try:
+        performance = ((end_price - start_price) / start_price) * 100
+        return f"{ticker.replace('.DE','')} : {performance:.2f} %"
+    except ZeroDivisionError:
+        return f"{ticker.replace('.DE','')} : Invalid start price (0)"
 
 def main():
     tickers = ["SXR8.DE", "ACWX", "AGG", "TLT"]

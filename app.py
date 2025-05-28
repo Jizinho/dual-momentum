@@ -64,11 +64,13 @@ with st.spinner("📥 Récupération des données..."):
             "perf_12m": perf_12m,
         }
 
+import math
+
 df_display = pd.DataFrame([
     {
         "Actif": r["name"],
-        "Performance 6 mois (%)": f"{r['perf_6m']:.2f}" if r['perf_6m'] is not None else "N/A",
-        "Performance 12 mois (%)": f"{r['perf_12m']:.2f}" if r['perf_12m'] is not None else "N/A",
+        "Performance 6 mois (%)": f"{r['perf_6m']:.2f}" if r['perf_6m'] is not None and not math.isnan(r['perf_6m']) else "N/A",
+        "Performance 12 mois (%)": f"{r['perf_12m']:.2f}" if r['perf_12m'] is not None and not math.isnan(r['perf_12m']) else "N/A",
     }
     for r in results.values()
 ])

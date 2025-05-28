@@ -7,28 +7,28 @@ tickers = {
     'SXR8': 'SXR8.DE',
     'ACWX': 'ACWX',
     'AGG': 'AGG',
-    'TLT': 'TLT',
-    'US03MY': '^IRX'
+    'TLT': 'TLT'
 }
+
+# Ticker T-Bill (rendement sans risque)
+t_bill_ticker = '^IRX'
 
 # Dates d’analyse
 end_date = pd.to_datetime('today').normalize()
 start_date = end_date - pd.DateOffset(years=1)
 
-# Télécharger les données
+# Télécharger les données des ETF
 raw_data = yf.download(list(tickers.values()), start=start_date, end=end_date, group_by='ticker', auto_adjust=True)
 
-# Initialiser le DataFrame de résultats
+# Initialiser le DataFrame de prix
 data = pd.DataFrame()
 
-# Extraire les colonnes 'Close' ou 'Adj Close' manuellement
+# Extraire les prix de clôture
 for name, ticker in tickers.items():
     try:
         if isinstance(raw_data.columns, pd.MultiIndex):
-            # Format multi-index : (ticker, OHLC)
             series = raw_data[ticker]['Close']
         else:
-            # Cas exceptionnel (1 seul ticker ou fallback)
             series = raw_data['Close']
         data[name] = series
     except Exception as e:
@@ -37,28 +37,44 @@ for name, ticker in tickers.items():
 # Supprimer les lignes vides
 data = data.dropna(how='all')
 
-# Calculer les performances
+# Calcul de la performance 12 mois (%)
 performance = ((data.iloc[-1] / data.iloc[0]) - 1) * 100
 performance = performance.round(2)
 
+# Télécharger la dernière valeur du T-Bill
+try:
+    t_bill_data = yf.download(t_bill_ticker, period="5d", interval="1d", progress=False)
+    t_bill_yield = t_bill_data['Close'].dropna().iloc[-1]
+except Exception as e:
+    t_bill_yield = None
+    st.error(f"Impossible de récupérer le rendement des T-Bills ({t_bill_ticker}) : {e}")
+
 # Appliquer la stratégie Dual Momentum
-if max(performance['AGG'], performance['TLT']) > max(performance['SXR8'], performance['ACWX']):
-    result = 'AGG' if performance['AGG'] > performance['TLT'] else 'TLT'
-else:
-    if performance['SXR8'] > performance['ACWX']:
-        result = 'SXR8' if performance['SXR8'] > performance['US03MY'] else 'US03MY'
+if t_bill_yield is not None:
+    # Comparaison avec rendement réel, pas en % de perf
+    if max(performance['AGG'], performance['TLT']) > max(performance['SXR8'], performance['ACWX']):
+        result = 'AGG' if performance['AGG'] > performance['TLT'] else 'TLT'
     else:
-        result = 'ACWX' if performance['ACWX'] > performance['US03MY'] else 'US03MY'
+        if performance['SXR8'] > performance['ACWX']:
+            result = 'SXR8' if performance['SXR8'] > t_bill_yield else 'Liquidité / Cash (T-Bills)'
+        else:
+            result = 'ACWX' if performance['ACWX'] > t_bill_yield else 'Liquidité / Cash (T-Bills)'
+else:
+    result = 'Erreur : rendement T-Bills indisponible'
 
 # Interface Streamlit
 st.title("📊 Stratégie Dual Momentum - Performance sur 12 Mois")
 
-# Tableau des performances
+# Affichage des performances
 df_perf = pd.DataFrame(performance).reset_index()
 df_perf.columns = ['ETF', 'Performance 12M (%)']
 st.dataframe(df_perf.style.format({'Performance 12M (%)': '{:.2f}'}), use_container_width=True)
 
-# Résultat final mis en valeur
+# Affichage du taux T-Bill
+if t_bill_yield is not None:
+    st.markdown(f"**Rendement T-Bill actuel (13 semaines)** : `{t_bill_yield:.2f}%`")
+
+# Résultat final
 st.markdown(
     f"<div style='background-color: yellow; padding: 10px; font-size: 20px; text-align: center;'>"
     f"<strong>Résultat : {result}</strong>"

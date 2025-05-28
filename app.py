@@ -16,19 +16,22 @@ end_date = pd.to_datetime('today').normalize()
 start_date = end_date - pd.DateOffset(years=1)
 
 def get_total_return(ticker):
-    # Télécharge prix + dividendes
+    # Télécharge les prix
     data = yf.download(ticker, start=start_date, end=end_date, auto_adjust=False)
+    
+    # Récupère les dividendes
     dividends = yf.Ticker(ticker).dividends
+    dividends.index = pd.to_datetime(dividends.index)  # ✅ conversion nécessaire ici
+    
+    # Filtrer la période
     dividends = dividends[(dividends.index >= start_date) & (dividends.index <= end_date)]
     
-    # Prix d'entrée et de sortie (non ajustés)
+    # Prix d'entrée et de sortie
     price_start = data['Close'].iloc[0]
     price_end = data['Close'].iloc[-1]
     
-    # Somme des dividendes sur la période
+    # Rendement total avec dividendes
     total_dividends = dividends.sum() if not dividends.empty else 0
-    
-    # Rendement total : (prix final + dividendes) / prix initial - 1
     total_return = ((price_end + total_dividends) / price_start - 1) * 100
     return round(total_return, 2)
 

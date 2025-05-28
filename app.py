@@ -10,8 +10,8 @@ tickers = {
     "S&P 500 (SPY)": "SPY",
     "ACWI ex-US (ACWX)": "ACWX",
     "US Bonds (AGG)": "AGG",
-    "Long-Term Bonds (TLT)": "TLT",
-    "US 3M T-Bill (IRX)": "^IRX"
+    "Long-Term Bonds (TLT)": "TLT"
+    # On peut ajouter ^IRX plus tard avec un traitement spécifique
 }
 
 # Dates de référence
@@ -21,22 +21,26 @@ twelve_months_ago = today - timedelta(days=365)
 
 @st.cache_data
 def calc_performance(ticker):
-    data = yf.download(ticker, start=twelve_months_ago, end=today)
-    if data.empty or "Close" not in data.columns:
-        return None, None
+    try:
+        data = yf.download(ticker, start=twelve_months_ago, end=today)
+        if data.empty or "Close" not in data.columns:
+            return None, None
 
-    price_today = data["Close"][-1]
-    
-    price_6m_ago = data[data.index <= six_months_ago]["Close"]
-    price_12m_ago = data[data.index <= twelve_months_ago]["Close"]
+        data = data.dropna(subset=["Close"])
 
-    if price_6m_ago.empty or price_12m_ago.empty:
-        return None, None
+        price_today = data["Close"][-1]
+        price_6m_ago = data[data.index <= six_months_ago]["Close"]
+        price_12m_ago = data[data.index <= twelve_months_ago]["Close"]
 
-    perf_6m = (price_today - price_6m_ago[-1]) / price_6m_ago[-1] * 100
-    perf_12m = (price_today - price_12m_ago[-1]) / price_12m_ago[-1] * 100
+        if price_6m_ago.empty or price_12m_ago.empty:
+            return None, None
 
-    return round(perf_6m, 2), round(perf_12m, 2)
+        perf_6m = (price_today - price_6m_ago[-1]) / price_6m_ago[-1] * 100
+        perf_12m = (price_today - price_12m_ago[-1]) / price_12m_ago[-1] * 100
+
+        return round(perf_6m, 2), round(perf_12m, 2)
+    except Exception as e:
+        return f"Erreur: {e}", f"Erreur: {e}"
 
 # Création du tableau de performance
 results = []

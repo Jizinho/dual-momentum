@@ -16,16 +16,19 @@ tickers = {
 end_date = pd.to_datetime('today').normalize()
 start_date = end_date - pd.DateOffset(years=1)
 
-# Récupération des données ajustées
-data = yf.download(list(tickers.values()), start=start_date, end=end_date)['Adj Close']
-data.columns = tickers.keys()
-data = data.dropna(how='all')
+# Téléchargement brut
+raw_data = yf.download(list(tickers.values()), start=start_date, end=end_date)
+
+# Extraction de la colonne 'Adj Close' avec renommage
+data = raw_data['Adj Close']
+data.columns = tickers.keys()  # Renommer selon nos alias
+data = data.dropna(how='all')  # Supprimer les lignes vides
 
 # Calcul des performances
 performance = (data.iloc[-1] / data.iloc[0] - 1) * 100
 performance = performance.round(2)
 
-# Appliquer la logique de stratégie
+# Application de la stratégie
 if max(performance['AGG'], performance['TLT']) > max(performance['SXR8'], performance['ACWX']):
     result = 'AGG' if performance['AGG'] > performance['TLT'] else 'TLT'
 else:
@@ -34,7 +37,7 @@ else:
     else:
         result = 'ACWX' if performance['ACWX'] > performance['US03MY'] else 'US03MY'
 
-# Affichage Streamlit
+# Affichage dans Streamlit
 st.title("📊 Stratégie Dual Momentum - Performance sur 12 Mois")
 
 # Tableau de performance
@@ -42,7 +45,7 @@ df_perf = pd.DataFrame(performance).reset_index()
 df_perf.columns = ['ETF', 'Performance 12M (%)']
 st.dataframe(df_perf.style.format({'Performance 12M (%)': '{:.2f}'}), use_container_width=True)
 
-# Résultat final
+# Résultat final en surbrillance jaune
 st.markdown(
     f"<div style='background-color: yellow; padding: 10px; font-size: 20px; text-align: center;'>"
     f"<strong>Résultat : {result}</strong>"

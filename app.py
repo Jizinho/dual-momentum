@@ -1,43 +1,51 @@
 import yfinance as yf
 import pandas as pd
+import streamlit as st
 from datetime import datetime
 
-# Liste des tickers Yahoo Finance
+# Tickers et alias simples
 tickers = {
-    'SXR8': 'SXR8.DE',     # ETF US
-    'ACWX': 'ACWX',        # ETF Monde hors US
-    'AGG': 'AGG',          # Obligations CT
-    'TLT': 'TLT',          # Obligations LT
-    'US03MY': '^IRX'       # Rendement 3 mois (remplacé par un proxy car 'US03MY.L' est incorrect)
+    'SXR8': 'SXR8.DE',
+    'ACWX': 'ACWX',
+    'AGG': 'AGG',
+    'TLT': 'TLT',
+    'US03MY': '^IRX'  # Taux 3 mois
 }
 
-# Dates
+# Dates d’analyse
 end_date = pd.to_datetime('today').normalize()
 start_date = end_date - pd.DateOffset(years=1)
 
-# Téléchargement des données
+# Récupération des données ajustées
 data = yf.download(list(tickers.values()), start=start_date, end=end_date)['Adj Close']
+data.columns = tickers.keys()
+data = data.dropna(how='all')
 
-# Nettoyage et renommage
-data.columns = tickers.keys()  # Renomme les colonnes avec les clés (noms simples)
-data = data.dropna(how='all')  # Supprime les lignes vides
-
-# Calcul de performance 12 mois
+# Calcul des performances
 performance = (data.iloc[-1] / data.iloc[0] - 1) * 100
 performance = performance.round(2)
 
-# Affichage des performances
-print("Performance 12M (%) :\n")
-print(performance)
-
-# Application de la stratégie Dual Momentum
-resultat = ""
+# Appliquer la logique de stratégie
 if max(performance['AGG'], performance['TLT']) > max(performance['SXR8'], performance['ACWX']):
-    resultat = 'AGG' if performance['AGG'] > performance['TLT'] else 'TLT'
+    result = 'AGG' if performance['AGG'] > performance['TLT'] else 'TLT'
 else:
     if performance['SXR8'] > performance['ACWX']:
-        resultat = 'SXR8' if performance['SXR8'] > performance['US03MY'] else 'US03MY'
+        result = 'SXR8' if performance['SXR8'] > performance['US03MY'] else 'US03MY'
     else:
-        resultat = 'ACWX' if performance['ACWX'] > performance['US03MY'] else 'US03MY'
+        result = 'ACWX' if performance['ACWX'] > performance['US03MY'] else 'US03MY'
 
-print("\nRésultat :", resultat)
+# Affichage Streamlit
+st.title("📊 Stratégie Dual Momentum - Performance sur 12 Mois")
+
+# Tableau de performance
+df_perf = pd.DataFrame(performance).reset_index()
+df_perf.columns = ['ETF', 'Performance 12M (%)']
+st.dataframe(df_perf.style.format({'Performance 12M (%)': '{:.2f}'}), use_container_width=True)
+
+# Résultat final
+st.markdown(
+    f"<div style='background-color: yellow; padding: 10px; font-size: 20px; text-align: center;'>"
+    f"<strong>Résultat : {result}</strong>"
+    f"</div>",
+    unsafe_allow_html=True
+)

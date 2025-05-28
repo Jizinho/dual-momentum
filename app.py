@@ -6,20 +6,20 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="Dual Momentum", page_icon="📈")
 st.title("📊 Stratégie Dual Momentum - Automatisée")
 
-# Définir les ETF et indices
+# Définir les ETF et indices (remplacement de ^IRX par BIL)
 etfs = {
-    'SXR8': 'SXR8.DE',     # S&P500 version Europe (iShares)
-    'ACWX': 'ACWX',        # Marchés mondiaux hors USA
-    'AGG': 'AGG',          # Obligations US court terme
-    'TLT': 'TLT',          # Obligations US long terme
-    'US03MY': '^IRX'       # Taux du Trésor 3 mois
+    'SXR8': 'SXR8.DE',     # S&P500 (Europe)
+    'ACWX': 'ACWX',        # Actions hors US
+    'AGG': 'AGG',          # Obligations court terme
+    'TLT': 'TLT',          # Obligations long terme
+    'US03MY': 'BIL'        # ETF sur taux court terme (remplace ^IRX)
 }
 
-# Période : 12 mois en arrière depuis aujourd’hui
+# Période : 12 mois
 end_date = datetime.today()
 start_date = end_date - timedelta(days=365)
 
-# Fonction de calcul de performance
+# Fonction pour récupérer les performances
 @st.cache_data
 def get_12m_perf(ticker):
     try:
@@ -34,10 +34,8 @@ def get_12m_perf(ticker):
     except:
         return None
 
-# Calculer les performances des 12 derniers mois
+# Calculer les performances
 performances = {name: get_12m_perf(ticker) for name, ticker in etfs.items()}
-
-# Afficher les performances dans un tableau
 perf_df = pd.DataFrame.from_dict(performances, orient='index', columns=['Performance 12M (%)'])
 
 # Appliquer la stratégie Dual Momentum
@@ -55,23 +53,26 @@ if all(performances[k] is not None for k in ['SXR8', 'ACWX', 'AGG', 'TLT', 'US03
         else:
             result = 'ACWX' if performances['ACWX'] > performances['US03MY'] else 'US03MY'
 
-# Ajouter la ligne de résultat au tableau
+# Ajouter la ligne finale
 perf_df.loc['📌 Choix recommandé'] = [result]
 
 # Affichage
 st.dataframe(perf_df)
 
 if "⚠️" in result:
-    st.warning("Certaines données sont manquantes. Vérifie les tickers ou réessaie plus tard.")
+    st.warning("Certaines données sont manquantes ou inexploitables.")
 else:
     st.success(f"✅ ETF recommandé pour ce mois : **{result}**")
 
-# Facultatif : afficher les données brutes (pour debug)
-with st.expander("🔍 Voir les données brutes téléchargées"):
+# Bloc pour tester les données brutes
+with st.expander("🔍 Voir les données brutes"):
     for name, ticker in etfs.items():
         st.write(f"**{name}** ({ticker})")
-        data = yf.download(ticker, start=start_date, end=end_date, interval="1mo")
-        if 'Adj Close' in data and not data['Adj Close'].dropna().empty:
-            st.line_chart(data['Adj Close'])
-        else:
-            st.info("⛔ Données indisponibles ou incompatibles pour ce ticker.")
+        try:
+            df = yf.download(ticker, start=start_date, end=end_date, interval="1mo")
+            if 'Adj Close' in df and not df['Adj Close'].dropna().empty:
+                st.line_chart(df['Adj Close'])
+            else:
+                st.info("⛔ Données indisponibles ou vides pour ce ticker.")
+        except Exception as e:
+            st.error(f"Erreur lors du chargement de {ticker} : {e}")

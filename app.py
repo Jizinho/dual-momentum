@@ -12,7 +12,7 @@ if uploaded_file is not None:
     try:
         # Charger les données
         if uploaded_file.name.endswith(".csv"):
-            data = pd.read_csv(uploaded_file parse_dates=['Date'], index_col='Date')
+            data = pd.read_csv(uploaded_file, parse_dates=['Date'], index_col='Date')
         else:  # Fichier Excel
             data = pd.read_excel(uploaded_file, parse_dates=['Date'], index_col='Date')
         

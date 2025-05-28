@@ -4,26 +4,27 @@ import streamlit as st
 from datetime import datetime, timedelta
 
 st.set_page_config(page_title="Dual Momentum", page_icon="📈")
-st.title("📊 Stratégie Dual Momentum - Version Fiable (USA-based tickers)")
+st.title("📊 Stratégie Dual Momentum (Version Fiable - ETF US)")
 
-# Tickers fiables et accessibles par yfinance
+# 🎯 ETF 100 % compatibles yfinance (ETF US)
 etfs = {
-    'S&P500 (SPY)': 'SPY',        # remplace SXR8
-    'ACWX': 'ACWX',
-    'AGG': 'AGG',
-    'TLT': 'TLT',
-    'US03MY (BIL)': 'BIL'         # remplace ^IRX
+    'US': 'SPY',           # S&P 500 US
+    'World': 'ACWX',       # Actions monde hors US
+    'Bonds_CT': 'AGG',     # Obligations court terme
+    'Bonds_LT': 'TLT',     # Obligations long terme
+    'T-Bill': 'BIL'        # Trésor US court terme (remplace ^IRX)
 }
 
-# Période : 12 mois
+# Dates
 end_date = datetime.today()
 start_date = end_date - timedelta(days=365)
 
+# Fonction de performance 12 mois
 @st.cache_data
 def get_12m_perf(ticker):
     try:
         df = yf.download(ticker, start=start_date, end=end_date, interval="1mo")
-        if 'Adj Close' not in df.columns or df['Adj Close'].dropna().empty:
+        if 'Adj Close' not in df or df['Adj Close'].dropna().empty:
             return None
         data = df['Adj Close'].dropna()
         if len(data) < 2:
@@ -33,45 +34,46 @@ def get_12m_perf(ticker):
     except:
         return None
 
-# Récupérer les performances
+# Calcul des performances
 performances = {name: get_12m_perf(ticker) for name, ticker in etfs.items()}
 perf_df = pd.DataFrame.from_dict(performances, orient='index', columns=['Performance 12M (%)'])
 
-# Appliquer la stratégie
+# Logique Dual Momentum
 result = "⚠️ Données insuffisantes"
 
-if all(perf is not None for perf in performances.values()):
-    stocks_avg = (performances['S&P500 (SPY)'] + performances['ACWX']) / 2
-    bonds_avg = (performances['AGG'] + performances['TLT']) / 2
+if all(performances[k] is not None for k in ['US', 'World', 'Bonds_CT', 'Bonds_LT', 'T-Bill']):
+    stocks_avg = (performances['US'] + performances['World']) / 2
+    bonds_avg = (performances['Bonds_CT'] + performances['Bonds_LT']) / 2
 
     if bonds_avg > stocks_avg:
-        result = 'AGG' if performances['AGG'] > performances['TLT'] else 'TLT'
+        result = 'AGG' if performances['Bonds_CT'] > performances['Bonds_LT'] else 'TLT'
     else:
-        if performances['S&P500 (SPY)'] > performances['ACWX']:
-            result = 'S&P500 (SPY)' if performances['S&P500 (SPY)'] > performances['US03MY (BIL)'] else 'US03MY (BIL)'
+        if performances['US'] > performances['World']:
+            result = 'SPY' if performances['US'] > performances['T-Bill'] else 'BIL'
         else:
-            result = 'ACWX' if performances['ACWX'] > performances['US03MY (BIL)'] else 'US03MY (BIL)'
+            result = 'ACWX' if performances['World'] > performances['T-Bill'] else 'BIL'
 
-# Ajouter le résultat final au tableau
+# Ajouter la décision au tableau
 perf_df.loc['📌 Choix recommandé'] = [result]
 
-# Afficher le tableau
+# Affichage tableau
 st.dataframe(perf_df)
 
+# Résultat
 if "⚠️" in result:
     st.warning("Certaines données sont manquantes ou inexploitables.")
 else:
     st.success(f"✅ ETF recommandé pour ce mois : **{result}**")
 
-# Graphiques des données brutes
-with st.expander("🔍 Voir les données brutes"):
+# Optionnel : visualisation
+with st.expander("📉 Graphiques des ETF (Adj Close mensuel)"):
     for name, ticker in etfs.items():
-        st.write(f"**{name}** ({ticker})")
+        st.subheader(f"{name} ({ticker})")
         try:
             df = yf.download(ticker, start=start_date, end=end_date, interval="1mo")
             if 'Adj Close' in df and not df['Adj Close'].dropna().empty:
                 st.line_chart(df['Adj Close'])
             else:
-                st.info("⛔ Données indisponibles.")
+                st.info("⛔ Données indisponibles ou vides pour ce ticker.")
         except Exception as e:
-            st.error(f"Erreur : {e}")
+            st.error(f"Erreur lors du chargement de {ticker} : {e}")

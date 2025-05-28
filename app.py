@@ -14,14 +14,18 @@ tickers = {
     "TLT": "Obligations LT (TLT)"
 }
 
-# Fonction de calcul des performances
+# Fonction pour calculer les performances
 def calc_perf(ticker):
     data = yf.download(ticker, period="1y", interval="1d", progress=False)
+
     if data.empty or 'Close' not in data.columns:
         return None, None
 
-    # Nettoyage des données
-    data = data.dropna(subset=['Close'])
+    # Filtrer les valeurs manquantes dans Close si colonne présente
+    data = data[['Close']].dropna()
+
+    if data.empty:
+        return None, None
 
     today = data.index[-1]
     price_today = data['Close'].iloc[-1]
@@ -29,7 +33,7 @@ def calc_perf(ticker):
     date_6m = today - timedelta(days=182)
     date_12m = today - timedelta(days=365)
 
-    # Obtenir les prix les plus proches dans le passé
+    # Chercher les prix proches dans le passé
     price_6m = data[data.index <= date_6m]['Close'].iloc[-1] if not data[data.index <= date_6m].empty else None
     price_12m = data[data.index <= date_12m]['Close'].iloc[-1] if not data[data.index <= date_12m].empty else None
 
@@ -41,9 +45,8 @@ def calc_perf(ticker):
 
     return perf_6m, perf_12m
 
-# Calcul des performances
+# Chargement des données
 results = {}
-
 with st.spinner("📥 Récupération des données..."):
     for ticker, name in tickers.items():
         perf_6m, perf_12m = calc_perf(ticker)
@@ -53,12 +56,12 @@ with st.spinner("📥 Récupération des données..."):
             "perf_12m": perf_12m,
         }
 
-# Tableau d’affichage
+# Affichage du tableau
 df_display = pd.DataFrame([
     {
         "Actif": r["name"],
-        "Performance 6 mois (%)": f"{r['perf_6m']:.2f}" if isinstance(r['perf_6m'], (float, int)) else "N/A",
-        "Performance 12 mois (%)": f"{r['perf_12m']:.2f}" if isinstance(r['perf_12m'], (float, int)) else "N/A",
+        "Performance 6 mois (%)": f"{r['perf_6m']:.2f}" if isinstance(r['perf_6m'], (int, float)) else "N/A",
+        "Performance 12 mois (%)": f"{r['perf_12m']:.2f}" if isinstance(r['perf_12m'], (int, float)) else "N/A",
     }
     for r in results.values()
 ])
@@ -66,7 +69,7 @@ df_display = pd.DataFrame([
 st.subheader("📈 Performances des actifs")
 st.table(df_display)
 
-# Recommandation basée sur la stratégie
+# Recommandation
 perf_actions = max([
     results.get("SXR8.DE", {}).get("perf_12m") or -999,
     results.get("ACWX", {}).get("perf_12m") or -999

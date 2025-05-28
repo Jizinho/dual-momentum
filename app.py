@@ -15,53 +15,52 @@ tickers = {
 
 def calc_perf(ticker):
     data = yf.download(ticker, period="1y", interval="1d", progress=False)
+    # Vérifier que la colonne 'Close' est bien présente
     if data.empty or 'Close' not in data.columns:
-        return None, None, data
+        return None, None
+
+    # Nettoyer les lignes où 'Close' est NaN
+    data = data.dropna(subset=['Close'])
+    if data.empty:
+        return None, None
 
     today = data.index[-1]
 
     date_6m = today - timedelta(days=182)
     date_12m = today - timedelta(days=365)
 
-    # Trouver le dernier prix <= date_6m et date_12m
+    # Trouver le dernier prix avant ou égal à date_6m et date_12m
     price_6m_series = data[data.index <= date_6m]['Close']
     price_12m_series = data[data.index <= date_12m]['Close']
 
     if price_6m_series.empty or price_12m_series.empty:
-        return None, None, data
+        return None, None
 
     price_6m = price_6m_series.iloc[-1]
     price_12m = price_12m_series.iloc[-1]
-    price_today = data['Close'][-1]
+    price_today = data['Close'].iloc[-1]
 
     perf_6m = (price_today - price_6m) / price_6m * 100
     perf_12m = (price_today - price_12m) / price_12m * 100
 
-    return perf_6m, perf_12m, data
+    return perf_6m, perf_12m
 
-results = {}
-
-with st.spinner("Récupération des données..."):
-    for ticker, name in tickers.items():
-        perf_6m, perf_12m, data = calc_perf(ticker)
-        results[ticker] = {
-            "name": name,
-            "perf_6m": perf_6m,
-            "perf_12m": perf_12m,
-            "data": data
-        }
-
-# Affichage données brutes pour debug (tu peux commenter après)
-for ticker, res in results.items():
-    st.subheader(f"Données brutes pour {res['name']} ({ticker})")
-    st.write(res["data"].tail(5))
-
-# Préparation DataFrame pour affichage
 def format_perf(p):
     if p is None or (isinstance(p, float) and math.isnan(p)):
         return "N/A"
     else:
         return f"{p:.2f}"
+
+results = {}
+
+with st.spinner("Récupération des données..."):
+    for ticker, name in tickers.items():
+        perf_6m, perf_12m = calc_perf(ticker)
+        results[ticker] = {
+            "name": name,
+            "perf_6m": perf_6m,
+            "perf_12m": perf_12m,
+        }
 
 df_display = pd.DataFrame([
     {
@@ -75,7 +74,6 @@ df_display = pd.DataFrame([
 st.subheader("Performances des actifs")
 st.table(df_display)
 
-# Dual Momentum simplifié
 perf_actions = max(
     (results.get("SXR8.DE", {}).get("perf_12m") or -999),
     (results.get("ACWX", {}).get("perf_12m") or -999),

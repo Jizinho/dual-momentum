@@ -15,21 +15,32 @@ tickers = {
 end_date = pd.to_datetime('today').normalize()
 start_date = end_date - pd.DateOffset(years=1)
 
-# Télécharger les données
+# Télécharger les données (sauf Treasury Bonds)
 data = pd.DataFrame()
 for name, ticker in tickers.items():
     try:
-        df = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True)
-        data[name] = df['Close']
+        if name == 'Treasury Bonds':
+            df = yf.download(ticker, period='5d', interval='1d', auto_adjust=True)
+            data[name] = df['Close']
+        else:
+            df = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True)
+            data[name] = df['Close']
     except Exception as e:
         st.warning(f"Erreur pour {name} ({ticker}) : {e}")
 
-# Nettoyer les données
+# Nettoyer les données (on garde que les lignes où tout est disponible)
 data = data.dropna(how='any')
 
-# Calcul des performances sur 12 mois
-performance = ((data.iloc[-1] / data.iloc[0]) - 1) * 100
-performance = performance.round(2)
+# Calcul des performances sur 12 mois pour tous sauf Treasury Bonds
+performance = {}
+for name in data.columns:
+    if name == 'Treasury Bonds':
+        performance[name] = data[name].iloc[-1]  # valeur actuelle
+    else:
+        perf = ((data[name].iloc[-1] / data[name].iloc[0]) - 1) * 100
+        performance[name] = round(perf, 2)
+
+performance = pd.Series(performance)
 
 # Appliquer la stratégie Dual Momentum
 if max(performance['CT Bonds'], performance['LT Bonds']) > max(performance['US S&P500'], performance['World ex.US']):

@@ -15,7 +15,12 @@ tickers = {
 
 def calc_perf(ticker):
     data = yf.download(ticker, period="1y", interval="1d", progress=False)
+    st.write(f"Ticker: {ticker}")
+    st.write(f"Données récupérées (colonnes): {list(data.columns)}")
+    st.write(data.head())
+
     if data.empty or 'Close' not in data.columns:
+        st.warning(f"Aucune donnée Close disponible pour {ticker}")
         return None, None
     today = data.index[-1]
     price_today = data['Close'][-1]

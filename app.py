@@ -1,80 +1,94 @@
-import yfinance as yf
+import streamlit as st
 import pandas as pd
+import numpy as np
 from datetime import datetime, timedelta
 
-# Période de 12 mois glissants
-end_date = datetime.today()
-start_date = end_date - timedelta(days=365)
+# Titre de l'application
+st.title("Dual Momentum - Décision mensuelle")
+st.markdown("Calcule la performance des actifs sur les 12 derniers mois et prend une décision.")
 
-# Tickers à suivre
-tickers = {
-    'AGG': 'AGG',
-    'TLT': 'TLT',
-    'SXR8': 'SXR8.DE',
-    'ACWX': 'ACWX',
-    'US03MY': '^IRX'
-}
+# Génération de données simulées (tu pourras les remplacer par des données réelles)
+@st.cache_data
+def generate_data():
+    np.random.seed(42)
+    dates = pd.date_range(start="2024-01-01", end="2025-01-15", freq='D')
+    data = pd.DataFrame({
+        'Date': dates,
+        'AGG': np.cumprod(1 + np.random.normal(0, 0.0005, len(dates))),
+        'TLT': np.cumprod(1 + np.random.normal(0, 0.001, len(dates))),
+        'SXR8': np.cumprod(1 + np.random.normal(0.0005, 0.002, len(dates))),
+        'ACWX': np.cumprod(1 + np.random.normal(0.0006, 0.0025, len(dates))),
+        'US03MY': np.cumprod(1 + np.random.normal(0.0001, 0.0002, len(dates)))
+    }).set_index('Date')
+    return data
 
-returns = {}
+# Calcul de la performance sur 12 mois
+def performance_12m(df, date):
+    one_year_ago = date - pd.DateOffset(years=1)
+    if one_year_ago < df.index[0]:
+        return None
+    return (df.loc[date] / df.loc[one_year_ago]) - 1
 
-print(f"📅 Période analysée : {start_date.date()} → {end_date.date()}\n")
+# Logique de décision
+def dual_momentum_decision(data, date):
+    perf = performance_12m(data, date)
+    if perf is None:
+        return "Pas assez de données pour une décision."
 
-for name, ticker in tickers.items():
-    print(f"📥 Téléchargement de {name} ({ticker})...")
+    # Formattage des performances
+    perf_str = {
+        "SXR8": f"{perf['SXR8'] * 100:.2f} %",
+        "ACWX": f"{perf['ACWX'] * 100:.2f} %",
+        "AGG": f"{perf['AGG'] * 100:.2f} %",
+        "TLT": f"{perf['TLT'] * 100:.2f} %",
+        "US03MY": f"{perf['US03MY'] * 100:.2f} %"
+    }
 
-    try:
-        df = yf.download(ticker, start=start_date, end=end_date, progress=False)
-        
-        if df.empty:
-            print(f"⚠️  Données vides pour {name} ({ticker})")
-            returns[name] = None
-            continue
+    # Comparaison obligations vs actions
+    bond_perf = max(perf['AGG'], perf['TLT'])
+    stock_perf = max(perf['SXR8'], perf['ACWX'])
 
-        print(f"✅ {name} : {len(df)} lignes chargées")
+    result = (
+        f"SXR8 : {perf_str['SXR8']}\n"
+        f"ACWX : {perf_str['ACWX']}\n"
+        f"AGG : {perf_str['AGG']}\n"
+        f"TLT : {perf_str['TLT']}\n"
+        f"US03MY : {perf_str['US03MY']}\n"
+    )
 
-        # Afficher un aperçu
-        print(df.head(2))
-
-        prices = None
-        if 'Adj Close' in df.columns:
-            prices = df['Adj Close'].dropna()
-        elif 'Close' in df.columns:
-            prices = df['Close'].dropna()
-
-        if prices is None or len(prices) < 2:
-            print(f"⚠️  Données insuffisantes pour {name}")
-            returns[name] = None
-            continue
-
-        perf = (prices.iloc[-1] - prices.iloc[0]) / prices.iloc[0] * 100
-        returns[name] = perf
-
-    except Exception as e:
-        print(f"❌ Erreur lors du traitement de {name} : {e}")
-        returns[name] = None
-
-# Afficher tous les résultats
-print("\n📊 Rendements sur 12 mois :")
-for name, perf in returns.items():
-    if isinstance(perf, (int, float)):
-        print(f"{name}: {perf:.2f}%")
-    else:
-        print(f"{name}: Données indisponibles")
-
-# Appliquer la logique finale si données complètes
-required_keys = ['AGG', 'TLT', 'SXR8', 'ACWX', 'US03MY']
-if not all(k in returns and isinstance(returns[k], (int, float)) for k in required_keys):
-    print("\n🚫 Données incomplètes, impossible de sélectionner un actif.")
-else:
-    avg_bonds = (returns['AGG'] + returns['TLT']) / 2
-    avg_stocks = (returns['SXR8'] + returns['ACWX']) / 2
-
-    if avg_bonds > avg_stocks:
-        selected = 'AGG' if returns['AGG'] > returns['TLT'] else 'TLT'
-    else:
-        if returns['SXR8'] > returns['ACWX']:
-            selected = 'SXR8' if returns['SXR8'] > returns['US03MY'] else 'US03MY'
+    if bond_perf > stock_perf:
+        if perf['AGG'] > perf['TLT']:
+            result += "Résultat : AGG"
         else:
-            selected = 'ACWX' if returns['ACWX'] > returns['US03MY'] else 'US03MY'
+            result += "Résultat : TLT"
+    else:
+        if perf['SXR8'] > perf['ACWX']:
+            if perf['SXR8'] > perf['US03MY']:
+                result += "Résultat : SXR8"
+            else:
+                result += "Résultat : US03MY"
+        else:
+            if perf['ACWX'] > perf['US03MY']:
+                result += "Résultat : ACWX"
+            else:
+                result += "Résultat : US03MY"
 
-    print(f"\n✅ Actif sélectionné pour ce mois : {selected}")
+    return result
+
+# Génération des données
+data = generate_data()
+
+# Interface utilisateur
+st.subheader("Choisir une date pour la décision")
+selected_date = st.date_input("Sélectionnez une date", value=datetime(2025, 1, 1))
+
+# Conversion en datetime compatible avec l'index
+selected_date = pd.to_datetime(selected_date)
+
+# Vérifier si c'est le 1er du mois
+if selected_date.day != 1:
+    st.warning("⚠️ La stratégie doit être exécutée uniquement le 1er du mois.")
+else:
+    if st.button("Calculer la performance et prendre une décision"):
+        decision = dual_momentum_decision(data, selected_date)
+        st.text(décision)
